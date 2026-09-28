@@ -59,7 +59,25 @@ try {
   }
 
   await seed(client);
-  await step(`HTTP race test (${RACE_ROUNDS} rounds)`, 'node', ['scripts/race-test.mjs'], { BASE_URL, ROUNDS: RACE_ROUNDS });
+  await step('Availability simulator CLI (40 steps, seed 42)', 'node', ['scripts/simulate.mjs'],
+    { DATABASE_URL, SIM_STEPS: '40', SIM_INTERVAL_MS: '0', SIM_SEED: '42' });
+
+  // Race test while the simulator keeps changing availability (default exclusion keeps H1's ICU bed stable).
+  await seed(client);
+  const sim = spawn('node', ['scripts/simulate.mjs'], {
+    env: { ...process.env, DATABASE_URL, SIM_INTERVAL_MS: '20', SIM_SEED: '42' }, stdio: 'ignore' });
+  await step(`HTTP race test (${RACE_ROUNDS} rounds, simulator running concurrently)`, 'node', ['scripts/race-test.mjs'], { BASE_URL, ROUNDS: RACE_ROUNDS });
+  sim.kill('SIGINT');
+  await new Promise((r) => sim.on('close', r));
+  const { rows: bad } = await client.query(
+    `select r.hospital_id, r.type from resources r
+      where r.available < 0 or r.available + (select count(*) from reservations v where v.hospital_id = r.hospital_id
+            and v.resource_type = r.type and v.status in ('held', 'occupied')) > r.total`);
+  const { rows: [{ n: simRows }] } = await client.query(
+    `select count(*)::int n from resources where sim_changed_at > now() - interval '5 minutes'`);
+  results.push({ name: 'Invariant after concurrent simulation: 0 <= available <= total - held - occupied', ok: bad.length === 0 && simRows > 0, secs: '-',
+    out: (bad.length ? `violations: ${JSON.stringify(bad)}` : 'no violations across all hospitals/resources')
+      + `\nresource rows changed by the simulator during the race: ${simRows}` });
   await seed(client);
   await step('HTTP end-to-end flow', 'node', ['scripts/e2e-test.mjs'], { BASE_URL });
   await client.end();

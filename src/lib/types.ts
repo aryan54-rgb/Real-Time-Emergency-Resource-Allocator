@@ -16,7 +16,9 @@ export interface Resource {
   type: ResourceType;
   total: number;
   available: number;
-  updated_at: string;
+  updated_at: string;            // last confirmed by hospital staff (drives freshness)
+  sim_changed_at: string | null; // last change made by the demo simulator, if any
+  sim_delta: number | null;
 }
 
 export interface Hospital {

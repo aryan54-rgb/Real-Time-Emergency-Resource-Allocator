@@ -16,7 +16,8 @@
     "test:race": "node scripts/race-test.mjs",
     "test:e2e": "node scripts/e2e-test.mjs",
     "test:realtime": "node --env-file-if-exists=.env.local scripts/realtime-check.mjs",
-    "verify": "node scripts/verify.mjs"
+    "verify": "node scripts/verify.mjs",
+    "simulate": "node --env-file-if-exists=.env.local scripts/simulate.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",

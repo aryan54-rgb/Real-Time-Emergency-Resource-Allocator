@@ -11,6 +11,7 @@ accept or reject and confirm patient handover.
 | Area | What works |
 |---|---|
 | Live availability | 6 simulated hospitals × 5 resource types (ICU bed, general bed, ventilator, trauma team, cardiac unit). Hospital staff adjust or confirm counts; this sets the resource's "last confirmed" time, which drives freshness. Staff updates are compare-and-set, so a click based on a stale screen is refused (409 `STALE_COUNT`) and cannot re-open a reserved bed. |
+| Simulated live availability | `npm run simulate` starts a deterministic demo simulator (seeded; same seed + fresh seed data ⇒ identical run). It admits or discharges ±1 through the same compare-and-set function as staff, so it never overrides a reservation, never goes below 0, and never frees units that are held or occupied. Changes are tagged **SIM** and don't count as staff confirmations. Ctrl+C stops it; the app runs the same without it. |
 | Real-time sync | Supabase Realtime (`postgres_changes`) pushes DB changes to every open dashboard, with a 15 s safety poll. Without Supabase keys it falls back to polling every 2 s. The badge in the top-right shows which mode is active. **Realtime has not yet been verified on a real project**; run `npm run test:realtime`. |
 | Ranking | `score = 0.5·match + 0.35·travel + 0.15·freshness`. **match** is the share of the needed resources available; **travel** comes from an estimated ETA; **freshness** halves every 15 min. Hospitals that can't fully serve the case, or that already rejected it, are listed last and can't be reserved. |
 | Map | Leaflet + OpenStreetMap. Markers are coloured by free ICU beds. Click the map to place a case. Lines show reserved (dashed) and accepted cases. |
@@ -80,6 +81,17 @@ The migration enables RLS with read-only policies and adds the tables to the `su
 - **H3** has no free ICU beds.
 - **H2** and **H6** have deliberately stale data (45 and 90 min old), so the freshness penalty is visible.
 
+### Availability simulator
+
+```bash
+npm run simulate                              # one change every 4 s until Ctrl+C (seed 42)
+SIM_SEED=7 SIM_INTERVAL_MS=1000 npm run simulate
+SIM_STEPS=20 SIM_INTERVAL_MS=0 npm run simulate   # 20 changes immediately, then exit
+SIM_EXCLUDE="" npm run simulate               # also touch H1's ICU bed (excluded by default for the race demo)
+```
+
+For a reproducible run, start from `npm run db:seed` with the same `SIM_SEED`, with nobody else acting. The simulator uses `DATABASE_URL` (from `.env.local`), so it works the same against Supabase.
+
 ## Demo script (2 minutes)
 
 1. Open `/dispatcher` in **two** browser windows and `/hospital/H1` in a third.
@@ -87,12 +99,14 @@ The migration enables RLS with read-only policies and adds the tables to the `su
 3. Click **Reserve** on *Akurdi City Hospital (H1)* in both windows at about the same time. One succeeds. The other gets *"That resource was just taken…"*, H1 drops to "Missing: ICU bed", and the next hospital becomes the top pick.
 4. In the H1 window, the reservation appears under **Incoming requests**. Click **Accept**, then **Confirm patient handover**. Both dispatcher windows update on their own.
 5. Try **Reject** on another case: the bed is released, and that hospital can't be reserved again for that case.
+6. Run `npm run simulate` in a terminal: counts start changing on both screens, tagged **SIM**, with a "Simulated feed active" badge.
 
 ## Tests
 
 ```bash
 npm run verify         # EVERYTHING in one go, isolated: typecheck, unit/DB tests, production build,
-                       # then race + e2e against a throwaway Postgres and server -> evidence/VERIFICATION.md
+                       # then simulator, race (simulator running), e2e on a throwaway Postgres + server
+                       # -> evidence/VERIFICATION.md
 
 npm test               # unit + database tests (starts its own throwaway Postgres; no setup needed)
 npm run typecheck
@@ -119,6 +133,7 @@ What `npm test` covers (`tests/`):
   - clamping of availability updates
   - regression: a stale hospital-screen update can't re-open a reserved bed (including 20 concurrent staff-vs-dispatcher rounds)
   - reservations don't make stale data look fresh
+  - simulator: reproducible per seed, bounds, exclusions, DB-enforced cap, stale steps refused, freshness untouched, concurrent run with racing dispatchers
   - **control test**: a naive read-then-write reservation *does* double-book under the same interleaving, which shows the race tests can catch the bug
 - **`ranking.test.ts`**:
   - nearer hospital wins when all else is equal
@@ -134,6 +149,8 @@ What `npm test` covers (`tests/`):
 supabase/migrations/0001_init.sql   schema, atomic SQL functions, RLS + realtime (Supabase only)
 supabase/migrations/0002_*.sql      compare-and-set staff updates, Supabase grants/revokes
 scripts/verify.mjs                  one-command verification -> evidence/VERIFICATION.md
+scripts/simulate.mjs, simulator-core.mjs   demo availability simulator
+supabase/migrations/0003_*.sql      simulator source for set_availability (SIM markers + capacity cap)
 scripts/realtime-check.mjs          Supabase Realtime/RLS check
 evidence/                           verification report + UI screenshots
 TECHNICAL_STATUS.md                 requirements, test evidence, limitations, next steps
@@ -152,7 +169,7 @@ src/app/dispatcher, hospital/[id]   dashboards
 - **Travel time is an estimate:** straight-line distance × 1.35 at 30 km/h. There is no routing or traffic API yet.
 - **No hold expiry:** if a hospital never responds, the units stay held until the dispatcher cancels.
 - **No authentication:** anyone can open any hospital's dashboard. With Supabase, the anon key can read all tables (simulated data only).
-- **No automatic availability simulation:** counts change only through reservations and staff edits.
+- **The simulator is a demo aid:** random (seeded) ±1 changes, not a real hospital data feed.
 - **Manual reroute:** after a conflict the dispatcher picks the next hospital (one click).
 
 See `TECHNICAL_STATUS.md` for the full status.

@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useState } from 'react';
+import { SimBadge } from '@/components/SimBadge';
 import { SyncBadge } from '@/components/SyncBadge';
 import { StatusPill } from '@/components/StatusPill';
 import { formatAge, minutesAgo, post } from '@/lib/client';
@@ -56,6 +57,7 @@ export function HospitalDashboard({ hospitalId }: { hospitalId: string }) {
       <header className="topbar">
         <Link href="/" className="brand"><span>Pulse</span>Route</Link>
         <h1>{hospital?.name ?? 'Hospital'} <span className="muted small">({hospitalId})</span></h1>
+        {state && <SimBadge hospitals={state.hospitals} now={now} />}
         <SyncBadge mode={mode} error={error} />
       </header>
 
@@ -104,7 +106,7 @@ export function HospitalDashboard({ hospitalId }: { hospitalId: string }) {
 
         <section className="panel">
           <h2>Resource availability</h2>
-          <p className="muted small">Update counts as they change, or press Confirm if they are still correct. Counts not confirmed for {STALE_AFTER_MIN} min are flagged as stale to dispatchers. Reservations adjust counts automatically.</p>
+          <p className="muted small">Update counts as they change, or press Confirm if they are still correct. Counts not confirmed for {STALE_AFTER_MIN} min are flagged as stale to dispatchers. Reservations adjust counts automatically. Changes tagged SIM come from the demo simulator and do not count as confirmations.</p>
           <table className="res">
             <thead><tr><th>Resource</th><th>Available</th><th>Total</th><th>Last confirmed</th><th /></tr></thead>
             <tbody>
@@ -115,7 +117,14 @@ export function HospitalDashboard({ hospitalId }: { hospitalId: string }) {
                     <td className="strong">{RESOURCE_LABELS[res.type]}</td>
                     <td className={res.available === 0 ? 'bad strong' : 'strong'}>{res.available}</td>
                     <td>{res.total}</td>
-                    <td className={age > STALE_AFTER_MIN ? 'warn' : ''}>{formatAge(age)}</td>
+                    <td>
+                      <span className={age > STALE_AFTER_MIN ? 'warn' : ''}>{formatAge(age)}</span>
+                      {res.sim_changed_at && (
+                        <div className="sim-note" title="Changed by the demo simulator, not confirmed by staff">
+                          <span className="sim-tag">SIM</span> {res.sim_delta && res.sim_delta > 0 ? '+' : ''}{res.sim_delta} · {formatAge(minutesAgo(res.sim_changed_at, now))}
+                        </div>
+                      )}
+                    </td>
                     <td className="row">
                       <button className="btn btn-small" aria-label="decrease" disabled={busy || res.available <= 0} onClick={() => setAvail(res, res.available - 1)}>−</button>
                       <button className="btn btn-small" aria-label="increase" disabled={busy || res.available >= res.total} onClick={() => setAvail(res, res.available + 1)}>+</button>

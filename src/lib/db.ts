@@ -34,7 +34,7 @@ export async function loadState(): Promise<LiveState> {
     await client.query('begin isolation level repeatable read read only');
     h = await client.query<Omit<Hospital, 'resources'>>('select id, name, address, lat, lng from hospitals order by id');
     r = await client.query<Resource & { hospital_id: string }>(
-      'select hospital_id, type, total, available, updated_at from resources order by hospital_id, type');
+      'select hospital_id, type, total, available, updated_at, sim_changed_at, sim_delta from resources order by hospital_id, type');
     // Every active case is always returned; only closed history is capped.
     q = await client.query<EmergencyRequest>(
       `(select * from emergency_requests where ${ACTIVE})

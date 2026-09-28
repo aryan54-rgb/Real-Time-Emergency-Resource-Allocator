@@ -1,16 +1,18 @@
 # PulseRoute — verification run
 
-- Date: 2026-09-28T19:44:52.062Z
+- Date: 2026-09-28T20:25:54.676Z
 - Node v20.20.2 · linux
 - Result: **ALL PASSED**
 
 | Step | Result | Time |
 |---|---|---|
-| Typecheck | PASS | 11.2s |
-| Unit + database tests (vitest) | PASS | 8.2s |
-| Production build | PASS | 34.4s |
-| HTTP race test (25 rounds) | PASS | 1.5s |
-| HTTP end-to-end flow | PASS | 0.5s |
+| Typecheck | PASS | 10.3s |
+| Unit + database tests (vitest) | PASS | 11.6s |
+| Production build | PASS | 33.9s |
+| Availability simulator CLI (40 steps, seed 42) | PASS | 0.9s |
+| HTTP race test (25 rounds, simulator running concurrently) | PASS | 2.4s |
+| Invariant after concurrent simulation: 0 <= available <= total - held - occupied | PASS | -s |
+| HTTP end-to-end flow | PASS | 0.8s |
 
 ## Typecheck
 
@@ -24,10 +26,10 @@
 RUN  v4.1.11 /mnt/d/ARYAN/hackmatrix/pulseroute
 
 
- Test Files  2 passed (2)
-      Tests  26 passed (26)
-   Start at  01:14:07
-   Duration  5.88s (transform 98ms, setup 0ms, import 592ms, tests 1.17s, environment 0ms)
+ Test Files  3 passed (3)
+      Tests  35 passed (35)
+   Start at  01:55:04
+   Duration  9.41s (transform 128ms, setup 0ms, import 1.01s, tests 3.32s, environment 0ms)
 ```
 
 ## Production build
@@ -35,18 +37,18 @@ RUN  v4.1.11 /mnt/d/ARYAN/hackmatrix/pulseroute
 ```
 ▲ Next.js 16.3.6 (Turbopack)
 - Environments: .env.local
-✓ Running next.config.mjs took 282ms
+✓ Running next.config.mjs took 289ms
 
   Creating an optimized production build ...
 ✓ Compiled successfully in 4.2s
   Running TypeScript ...
-  Finished TypeScript in 9.9s ...
+  Finished TypeScript in 10.0s ...
   Collecting page data using 11 workers ...
   Generating static pages using 11 workers (0/4) ...
   Generating static pages using 11 workers (1/4) 
   Generating static pages using 11 workers (2/4) 
   Generating static pages using 11 workers (3/4) 
-✓ Generating static pages using 11 workers (4/4) in 741ms
+✓ Generating static pages using 11 workers (4/4) in 868ms
   Finalizing page optimization ...
 
 Route (app)
@@ -68,7 +70,54 @@ Route (app)
 ƒ  (Dynamic)  server-rendered on demand
 ```
 
-## HTTP race test (25 rounds)
+## Availability simulator CLI (40 steps, seed 42)
+
+```
+Availability simulator: seed 42, every 0 ms, 40 steps, excluding [H1:icu_bed]
+#1 H4 trauma_team 2 -> 1 (admission) applied
+#2 H6 cardiac_unit 1 -> 2 (discharge) applied
+#3 H2 cardiac_unit 1 -> 0 (admission) applied
+#4 H2 trauma_team 2 -> 1 (admission) applied
+#5 H6 general_bed 40 -> 39 (admission) applied
+#6 H2 icu_bed 3 -> 4 (discharge) applied
+#7 H5 icu_bed 6 -> 5 (admission) applied
+#8 H2 general_bed 20 -> 21 (discharge) applied
+#9 H5 general_bed 30 -> 31 (discharge) applied
+#10 H1 cardiac_unit 0 -> 1 (discharge) applied
+#11 H6 cardiac_unit 2 -> 1 (admission) applied
+#12 H4 trauma_team 1 -> 0 (admission) applied
+#13 H2 trauma_team 1 -> 0 (admission) applied
+#14 H2 general_bed 21 -> 22 (discharge) applied
+#15 H4 general_bed 15 -> 14 (admission) applied
+#16 H2 cardiac_unit 0 -> 1 (discharge) applied
+#17 H4 cardiac_unit 2 -> 1 (admission) applied
+#18 H2 ventilator 3 -> 2 (admission) applied
+#19 H1 general_bed 12 -> 11 (admission) applied
+#20 H4 icu_bed 4 -> 5 (discharge) applied
+#21 H2 icu_bed 4 -> 5 (discharge) applied
+#22 H2 general_bed 22 -> 21 (admission) applied
+#23 H5 icu_bed 5 -> 6 (discharge) applied
+#24 H4 general_bed 14 -> 13 (admission) applied
+#25 H2 trauma_team 0 -> 1 (discharge) applied
+#26 H1 trauma_team 1 -> 2 (discharge) applied
+#27 H5 general_bed 31 -> 32 (discharge) applied
+#28 H6 icu_bed 5 -> 4 (admission) applied
+#29 H6 trauma_team 3 -> 2 (admission) applied
+#30 H6 trauma_team 2 -> 1 (admission) applied
+#31 H1 ventilator 2 -> 1 (admission) applied
+#32 H3 icu_bed 0 -> 1 (discharge) applied
+#33 H4 ventilator 5 -> 6 (discharge) applied
+#34 H1 trauma_team 2 -> 1 (admission) applied
+#35 H6 trauma_team 1 -> 0 (admission) applied
+#36 H5 general_bed 32 -> 31 (admission) applied
+#37 H4 general_bed 13 -> 14 (discharge) applied
+#38 H1 ventilator 1 -> 2 (discharge) applied
+#39 H4 icu_bed 5 -> 6 (discharge) applied
+#40 H3 ventilator 1 -> 2 (discharge) applied
+Stopped after 40 steps: 40 applied, 0 skipped (concurrent change), 0 capped.
+```
+
+## HTTP race test (25 rounds, simulator running concurrently)
 
 ```
 Race test against http://localhost:3201: 25 rounds, 2 simultaneous requests for the last ICU bed at H1
@@ -100,6 +149,13 @@ Race test against http://localhost:3201: 25 rounds, 2 simultaneous requests for 
   ✓ round 25: statuses [200,409] -> 1 success, 1 conflict, ICU left 0
 
 ALL CHECKS PASSED
+```
+
+## Invariant after concurrent simulation: 0 <= available <= total - held - occupied
+
+```
+no violations across all hospitals/resources
+resource rows changed by the simulator during the race: 26
 ```
 
 ## HTTP end-to-end flow

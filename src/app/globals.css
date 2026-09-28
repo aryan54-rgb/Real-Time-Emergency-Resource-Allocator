@@ -122,3 +122,7 @@ th { font-size: 12px; color: var(--muted); font-weight: 600; }
 .bad { color: var(--red); }
 
 .leaflet-tooltip.map-label { font-size: 11px; font-weight: 600; padding: 1px 5px; box-shadow: none; border-color: var(--line); }
+
+.badge-sim { background: #efe7f6; color: #5b2b82; }
+.sim-note { font-size: 11px; color: #5b2b82; margin-top: 2px; }
+.sim-tag { font-weight: 700; background: #efe7f6; border-radius: 4px; padding: 0 4px; }

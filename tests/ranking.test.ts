@@ -5,7 +5,7 @@ import type { Hospital, Resource } from '@/lib/types';
 const now = new Date('2026-01-01T12:00:00Z');
 const ago = (min: number) => new Date(now.getTime() - min * 60000).toISOString();
 const res = (type: Resource['type'], available: number, ageMin = 0): Resource =>
-  ({ type, total: 10, available, updated_at: ago(ageMin) });
+  ({ type, total: 10, available, updated_at: ago(ageMin), sim_changed_at: null, sim_delta: null });
 const hosp = (id: string, lat: number, lng: number, resources: Resource[]): Hospital =>
   ({ id, name: id, address: '', lat, lng, resources });
 

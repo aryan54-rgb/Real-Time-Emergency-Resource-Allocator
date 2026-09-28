@@ -2,6 +2,7 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { SimBadge } from '@/components/SimBadge';
 import { SyncBadge } from '@/components/SyncBadge';
 import { StatusPill } from '@/components/StatusPill';
 import { formatAge, minutesAgo, post } from '@/lib/client';
@@ -77,6 +78,7 @@ export default function DispatcherPage() {
       <header className="topbar">
         <Link href="/" className="brand"><span>Pulse</span>Route</Link>
         <h1>Dispatcher console</h1>
+        {state && <SimBadge hospitals={hospitals} now={now} />}
         <SyncBadge mode={mode} error={error} />
       </header>
 

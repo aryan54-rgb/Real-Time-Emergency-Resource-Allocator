@@ -9,7 +9,7 @@ Reproduce every result below with one command: `npm run verify`. It uses its own
 | # | Requirement (from the HLTH02 brief) | Status | Where / how |
 |---|---|---|---|
 | R1 | Shared, up-to-date view of beds and other resources for ambulance teams and hospitals | **Done** | Dispatcher and hospital dashboards read one shared DB state. Live updates via 2 s polling (verified). Supabase Realtime is coded and hardened but **not yet verified on a real project** (see §3). |
-| R2 | Maintain **simulated live** availability data | **Partial** | 6 simulated hospitals × 5 resource types, seeded with realistic staleness. Counts change through reservations and staff edits. There is no automatic simulator, so data doesn't change unless someone acts. See next step #1. |
+| R2 | Maintain **simulated live** availability data | **Done** | 6 simulated hospitals × 5 resource types, plus a deterministic demo simulator (`npm run simulate`, seeded PRNG). It changes counts ±1 through the same compare-and-set function staff use. It never overrides a reservation, never goes below 0, and never advertises units already held/occupied. Simulated changes are tagged **SIM** and don't count as staff confirmations (freshness). Off unless started. |
 | R3 | Rank destinations by resource match, travel time, data freshness | **Done** (travel time estimated) | `src/lib/ranking.ts`: `0.5·match + 0.35·travel + 0.15·freshness`. Hospitals missing a resource or that rejected the case go last. ETA uses straight-line distance × 1.35 at 30 km/h, with no routing API, and is labelled in the UI. |
 | R4 | Hospital staff can accept or reject incoming requests | **Done** | `respond_to_request()`. Rejecting releases the held units and blocks that hospital for the case. Handover is confirmed separately. |
 | R5 | Handle conflicting simultaneous requests and the strict double-booking case | **Done, verified** | `reserve_resources()`: a guarded atomic `UPDATE … WHERE available > 0`, locks taken in sorted order, all-or-nothing for multiple resources. The loser gets 409 and a re-ranked list; the dispatcher reroutes with one click (not automatic, see next step #3). |
@@ -40,10 +40,11 @@ Latest `npm run verify` (2026-09-29, Node 20, local PostgreSQL 18 + production b
 | Suite | Result | What it proves |
 |---|---|---|
 | Typecheck | PASS | — |
-| Unit + database tests (`npm test`) | **26/26 pass** | Two simultaneous requests for H1's last ICU bed: exactly one wins, the loser stays `pending` and can be rerouted. A forced lock interleaving. 20 requests for 4 beds → exactly 4 win. One case racing at 2 hospitals. All-or-nothing multi-resource. No deadlock with opposite need orders. Lifecycle guards. Stale-count regression (4 tests, including 20 concurrent staff-vs-dispatcher rounds). Freshness unaffected by reservations. 8 ranking/geo unit tests. |
+| Unit + database tests (`npm test`) | **35/35 pass** | Two simultaneous requests for H1's last ICU bed: exactly one wins, the loser stays `pending` and can be rerouted. A forced lock interleaving. 20 requests for 4 beds → exactly 4 win. One case racing at 2 hospitals. All-or-nothing multi-resource. No deadlock with opposite need orders. Lifecycle guards. Stale-count regression (4 tests, including 20 concurrent staff-vs-dispatcher rounds). Freshness unaffected by reservations. 8 ranking/geo unit tests. 9 simulator tests: same seed → identical run, never < 0 or above `total − held − occupied`, exclusions, DB-enforced cap, stale step refused, freshness untouched, and a simulator running concurrently with 30 racing dispatchers (no unit promised twice). |
 | **Control test** | PASS | A naive "read, then decrement" implementation under the same interleaving **does** double-book (2 holds, 1 bed). The race tests are sensitive enough to catch a real bug. |
 | Production build | PASS | — |
-| HTTP race test (`npm run test:race`) | **25/25 rounds** | Two simultaneous `POST /reserve` for the last ICU bed → exactly one 200 and one 409 every round, 0 beds left. |
+| Simulator CLI (`npm run simulate`) | PASS | 40 steps, seed 42, all applied. |
+| HTTP race test (`npm run test:race`), **with the simulator running concurrently** | **25/25 rounds** | Two simultaneous `POST /reserve` for the last ICU bed → exactly one 200 and one 409 every round, 0 beds left. The simulator changed 26 resource rows during the run. Afterwards `0 ≤ available ≤ total − held − occupied` holds everywhere. |
 | HTTP end-to-end (`npm run test:e2e`) | **28/28 checks** | Create → rank → reserve → wrong hospital refused → reject → release → re-rank → reroute → accept → handover → bed stays occupied. Also: stale staff update refused, clamping, active-case visibility under 40 closed cases, input validation (400/404). |
 | Browser (Playwright, headless Chromium; run manually) | PASS | Two dispatcher windows click Reserve on H1's last ICU bed simultaneously → one "Reserved", one "just taken, re-ranked". Hospital accepts → handover → dispatcher updates without reload. A stale hospital "+" is refused and the screen refreshes. Screenshots in `evidence/screenshots/`. |
 | **Supabase Realtime** (`npm run test:realtime`) | **NOT RUN** | No Supabase project was available. Local Supabase needs Docker, which isn't running here. The script is ready: it checks anon read, anon write blocked, anon RPC refused, and Realtime event delivery + latency. |
@@ -53,7 +54,7 @@ Numbers above are functional test results on one laptop, not performance benchma
 ## 4. Known limitations
 
 - **Realtime is unverified.** Until `npm run test:realtime` passes on a real project, demo with polling (2 s). The badge shows which mode is active.
-- **No automatic availability simulation** (R2 is partial).
+- **The simulator is a demo aid, not a data feed.** Its ±1 changes are random (seeded). It leaves H1's ICU bed alone by default so the double-booking demo stays reproducible. Its changes are not staff confirmations, so stale hospitals stay stale until staff confirm.
 - **Travel time is an estimate**, with no routing or traffic data.
 - **Reservation holds never expire.** An unanswered request keeps its units until the dispatcher cancels.
 - **Rerouting after a conflict is manual.** It takes one click on the re-ranked list.
@@ -64,11 +65,10 @@ Numbers above are functional test results on one laptop, not performance benchma
 
 ## 5. Recommended next steps (not implemented; ranked by value for the remaining time)
 
-1. **Availability simulator (closes R2), ~1 h.** Add `npm run simulate`: every few seconds, randomly admit or discharge ±1 at a random hospital through the existing compare-and-set function, and occasionally "confirm" counts. The dashboards then move on their own, which is also good for the demo video.
-2. **Verify Realtime + deploy, ~1 h.** Create a free Supabase project: `npm run db:reset` → `npm run test:realtime` → deploy to Vercel. Use the transaction pooler (port 6543) for `DATABASE_URL` on serverless. This gives a public demo URL and turns the one unverified claim into evidence.
-3. **"Reserve next best" after a conflict, ~45 min.** When a reserve returns 409, offer, or automatically try, the next reservable hospital. This matches the brief's "the other is safely rerouted" wording. Reuses the existing endpoint.
-4. **Hold expiry, ~1 h.** Holds older than N minutes without a hospital response are released (lazy `expire_holds()` called from reserve/state), with a DB test. This removes the stuck-bed limitation.
-5. **Align the pitch deck with the build, ~30 min.** Update slides 4, 5 and 7 (stack, architecture diagram, references) and add the real evidence: test counts and screenshots from `evidence/`.
+1. **Verify Realtime + deploy, ~1 h.** Create a free Supabase project: `npm run db:reset` → `npm run test:realtime` → deploy to Vercel. Use the transaction pooler (port 6543) for `DATABASE_URL` on serverless. This gives a public demo URL and turns the one unverified claim into evidence.
+2. **"Reserve next best" after a conflict, ~45 min.** When a reserve returns 409, offer, or automatically try, the next reservable hospital. This matches the brief's "the other is safely rerouted" wording. Reuses the existing endpoint.
+3. **Hold expiry, ~1 h.** Holds older than N minutes without a hospital response are released (lazy `expire_holds()` called from reserve/state), with a DB test. This removes the stuck-bed limitation.
+4. **Align the pitch deck with the build, ~30 min.** Update slides 4, 5 and 7 (stack, architecture diagram, references) and add the real evidence: test counts and screenshots from `evidence/`.
 
 ## 6. Demo scenarios to record
 
@@ -78,4 +78,5 @@ Numbers above are functional test results on one laptop, not performance benchma
 4. **Freshness (~30 s).** Point out the stale flag on H2 (45 min) and H6 (90 min) → press Confirm on H6's ICU row → its data age resets and its rank rises.
 5. **Stale-screen protection (~30 s).** The hospital screen shows 1 ICU bed → a dispatcher reserves it → staff click "+" → "That count changed…" and the screen shows 0.
 6. **Multi-resource all-or-nothing (~20 s).** An ICU + Cardiac unit case → H1 shows "Missing: Cardiac unit" and can't be reserved; H4 can.
-7. **Evidence (~20 s).** `npm run verify` finishing with ALL PASSED, and `evidence/VERIFICATION.md`.
+7. **Simulated live availability (~30 s).** Run `npm run simulate` in a terminal next to the hospital and dispatcher screens: counts move on their own, each change is tagged **SIM**, the "Simulated feed active" badge appears, and "Last confirmed" does not change until staff press Confirm.
+8. **Evidence (~20 s).** `npm run verify` finishing with ALL PASSED, and `evidence/VERIFICATION.md`.

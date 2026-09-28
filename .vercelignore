@@ -1,0 +1,7 @@
+# Never upload local secrets or local build/CLI state; Vercel injects env vars itself.
+.env*
+!.env.example
+.next
+node_modules
+supabase/.temp
+*.tsbuildinfo

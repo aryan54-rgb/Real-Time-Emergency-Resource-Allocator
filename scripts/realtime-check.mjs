@@ -37,22 +37,34 @@ const rpc = await supabase.rpc('reserve_resources', { p_request_id: '00000000-00
 check(!!rpc.error, `anon RPC to reserve_resources is refused or fails (${rpc.error?.message ?? 'NO ERROR — function is callable by anon!'})`);
 
 // 3. realtime push latency
-const waiters = [];
+// One waiter per round; cleared on timeout so a late event can't be credited to the wrong round.
+let waiter = null;
+let dbListenerReady;
+const dbListener = new Promise((resolve) => { dbListenerReady = resolve; });
 const channel = supabase.channel('realtime-check')
   .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'resources' }, (p) => {
-    const w = waiters.shift();
-    if (w) w(p);
-  });
+    const w = waiter;
+    waiter = null;
+    w?.(p);
+  })
+  // Supabase confirms separately (after SUBSCRIBED) once the database listener is attached;
+  // writes made before this confirmation can be missed.
+  .on('system', {}, (p) => { if (p?.extension === 'postgres_changes') dbListenerReady(p.status); });
 const subscribed = await new Promise((resolve) => {
   const t = setTimeout(() => resolve('TIMEOUT'), 15000);
   channel.subscribe((status) => { if (status !== 'CLOSED') { clearTimeout(t); resolve(status); } });
 });
 check(subscribed === 'SUBSCRIBED', `channel subscribed (status: ${subscribed})`);
+const listener = await Promise.race([dbListener, new Promise((r) => setTimeout(() => r('TIMEOUT'), 15000))]);
+check(listener === 'ok', `database change listener attached (status: ${listener})`);
 
-if (subscribed === 'SUBSCRIBED') {
+if (subscribed === 'SUBSCRIBED' && listener === 'ok') {
   const latencies = [];
   for (let i = 0; i < ROUNDS; i++) {
-    const got = new Promise((resolve) => { waiters.push(resolve); setTimeout(() => resolve(null), 10000); });
+    const got = new Promise((resolve) => {
+      waiter = resolve;
+      setTimeout(() => { if (waiter === resolve) waiter = null; resolve(null); }, 10000);
+    });
     const t0 = performance.now();
     await db.query(`update resources set updated_at = now() where hospital_id = 'H1' and type = 'general_bed'`);
     const payload = await got;

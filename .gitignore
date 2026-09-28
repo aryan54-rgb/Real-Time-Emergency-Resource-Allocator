@@ -4,3 +4,6 @@ node_modules
 *.tsbuildinfo
 next-env.d.ts
 supabase/.temp/
+.vercel
+.env*
+!.env.example

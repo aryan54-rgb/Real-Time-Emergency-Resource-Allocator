@@ -1,18 +1,18 @@
 # PulseRoute — verification run
 
-- Date: 2026-09-28T20:25:54.676Z
+- Date: 2026-09-29T03:43:14.098Z
 - Node v20.20.2 · linux
 - Result: **ALL PASSED**
 
 | Step | Result | Time |
 |---|---|---|
-| Typecheck | PASS | 10.3s |
-| Unit + database tests (vitest) | PASS | 11.6s |
-| Production build | PASS | 33.9s |
-| Availability simulator CLI (40 steps, seed 42) | PASS | 0.9s |
-| HTTP race test (25 rounds, simulator running concurrently) | PASS | 2.4s |
+| Typecheck | PASS | 9.7s |
+| Unit + database tests (vitest) | PASS | 13.1s |
+| Production build | PASS | 38.5s |
+| Availability simulator CLI (40 steps, seed 42) | PASS | 0.7s |
+| HTTP race test (25 rounds, simulator running concurrently) | PASS | 1.7s |
 | Invariant after concurrent simulation: 0 <= available <= total - held - occupied | PASS | -s |
-| HTTP end-to-end flow | PASS | 0.8s |
+| HTTP end-to-end flow | PASS | 0.6s |
 
 ## Typecheck
 
@@ -28,8 +28,8 @@ RUN  v4.1.11 /mnt/d/ARYAN/hackmatrix/pulseroute
 
  Test Files  3 passed (3)
       Tests  35 passed (35)
-   Start at  01:55:04
-   Duration  9.41s (transform 128ms, setup 0ms, import 1.01s, tests 3.32s, environment 0ms)
+   Start at  09:12:19
+   Duration  10.62s (transform 148ms, setup 0ms, import 1.21s, tests 3.28s, environment 0ms)
 ```
 
 ## Production build
@@ -37,23 +37,24 @@ RUN  v4.1.11 /mnt/d/ARYAN/hackmatrix/pulseroute
 ```
 ▲ Next.js 16.3.6 (Turbopack)
 - Environments: .env.local
-✓ Running next.config.mjs took 289ms
+✓ Running next.config.mjs took 317ms
 
   Creating an optimized production build ...
-✓ Compiled successfully in 4.2s
+✓ Compiled successfully in 5.6s
   Running TypeScript ...
-  Finished TypeScript in 10.0s ...
+  Finished TypeScript in 13.1s ...
   Collecting page data using 11 workers ...
   Generating static pages using 11 workers (0/4) ...
   Generating static pages using 11 workers (1/4) 
   Generating static pages using 11 workers (2/4) 
   Generating static pages using 11 workers (3/4) 
-✓ Generating static pages using 11 workers (4/4) in 868ms
+✓ Generating static pages using 11 workers (4/4) in 921ms
   Finalizing page optimization ...
 
 Route (app)
 ┌ ƒ /
 ├ ○ /_not-found
+├ ƒ /ambulance/[id]
 ├ ƒ /api/hospitals/[id]/resources
 ├ ƒ /api/requests
 ├ ƒ /api/requests/[id]/cancel
@@ -122,7 +123,7 @@ Stopped after 40 steps: 40 applied, 0 skipped (concurrent change), 0 capped.
 ```
 Race test against http://localhost:3201: 25 rounds, 2 simultaneous requests for the last ICU bed at H1
 
-  ✓ round 1: statuses [409,200] -> 1 success, 1 conflict, ICU left 0
+  ✓ round 1: statuses [200,409] -> 1 success, 1 conflict, ICU left 0
   ✓ round 2: statuses [200,409] -> 1 success, 1 conflict, ICU left 0
   ✓ round 3: statuses [200,409] -> 1 success, 1 conflict, ICU left 0
   ✓ round 4: statuses [200,409] -> 1 success, 1 conflict, ICU left 0
@@ -155,7 +156,7 @@ ALL CHECKS PASSED
 
 ```
 no violations across all hospitals/resources
-resource rows changed by the simulator during the race: 26
+resource rows changed by the simulator during the race: 24
 ```
 
 ## HTTP end-to-end flow
